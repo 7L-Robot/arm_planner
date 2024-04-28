@@ -23,12 +23,8 @@ def str2bool(v):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', '-s', type=int, default=0)
-    parser.add_argument('--rrt', '-rrt', type=str2bool, const=True, nargs='?', default=False, help="Use RRT?")
-    parser.add_argument('--rrtc', '-rrtc', type=str2bool, const=True, nargs='?', default=True, help="Use RRT-Connect?")
-    parser.add_argument('--prm', '-prm', type=str2bool, const=True, nargs='?', default=False, help="Use PRM?")
-    parser.add_argument('--obprm', '-obprm', type=str2bool, const=True, nargs='?', default=False, help="Use OBPRM?")
-    parser.add_argument('--map2', '-map2', type=str2bool, const=True, nargs='?', default=False, help="Use map 2?")
-    parser.add_argument('--map3', '-map3', type=str2bool, const=True, nargs='?', default=False, help="Use map 3?")
+    parser.add_argument('--plan', '-p', type=str, default='rrtc', help="Use [  rrt | rrtc | prm | obprm ]")
+    parser.add_argument('--map', '-m', type=int, default=1, help="Use map [ 1 | 2 | 3 ]")
     parser.add_argument('--reuse_graph', '-reuse_graph', type=str2bool, const=True, nargs='?', default=False, help="Reuse the graph for PRM?")
     args = parser.parse_args()
 
@@ -49,13 +45,13 @@ if __name__ == '__main__':
     # 加机器人
     bot = RobotEnv(bid, cam, True, True)
 
-    planner = Planner(urdf_path, srdf_path, 'rrtc')
+    planner = Planner(urdf_path, srdf_path, args.plan)
 
     '''
     TODO: Replace obstacle box w/ the box specs in your workspace:
     [x, y, z, r, p, y, sx, sy, sz]
     '''
-    if args.map3:
+    if args.map == 3:
         boxes = np.array([
             # obstacle
             # [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -72,7 +68,7 @@ if __name__ == '__main__':
             # bottom
             [0, 0, -0.05, 0, 0, 0.78, 2, 2, 0.01]
         ])
-    elif args.map2:
+    elif args.map == 2:
         boxes = np.array([
             # obstacle
             [0.7, 0, 0.6, 0, 0, 0, 0.45, 0.3, 0.05],
@@ -113,12 +109,12 @@ if __name__ == '__main__':
     '''
     TODO: Fill in start and target joint positions
     '''
-    if args.map3:
+    if args.map == 3:
         joints_start = np.array([0, 3*np.pi/8, 0, -np.pi / 8, 0, np.pi / 2, np.pi / 4])
         joints_start[0] = -np.deg2rad(45)
         joints_target = np.array([0, 0, 0, -np.pi / 4, 0, np.pi / 4, np.pi / 4])
         joints_target[0] = -np.deg2rad(45)
-    elif args.map2:
+    elif args.map == 2:
         joints_start = np.array([0, np.pi/6, 0, -2*np.pi / 3, 0, 5*np.pi / 6, np.pi / 4])
         joints_target = np.array([0, 0, 0, -np.pi / 4, 0, np.pi / 4, np.pi / 4])
     else:
@@ -129,7 +125,7 @@ if __name__ == '__main__':
     
     for box in boxes:
         add_box( box[-3:]/2.0, box[:3], color=[1,1,0,0.5] )
-        
+        planner.add_obstacles(box)
 
     # for bi, pose in enumerate(fr._collision_box_poses_raw):
     #     pos = pose[:3]
@@ -169,8 +165,9 @@ if __name__ == '__main__':
     plan = np.concatenate([plan, plan[:,:2]], axis=1)
 
     bot.show_path(plan)
-
+    input('go')
     bot.follow_path(plan, 10)
     bot.follow_path(plan[::-1], 10)
 
+    input('end')
     a = 1

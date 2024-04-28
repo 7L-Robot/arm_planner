@@ -223,12 +223,7 @@ class OBPRM:
         return path
 
     def plan(self, q_start, q_target, constraint=None, args=None):
-        if args.map3:
-            graph_name = 'graph_obprm_map3.pickle'
-        elif args.map2:
-            graph_name = 'graph_obprm_map2.pickle'
-        else:
-            graph_name = 'graph_obprm_map1.pickle'
+        graph_name = f'graph_obprm_map{args.map}.pickle'
 
         if args.reuse_graph:
             graph = pickle.load(open(graph_name, 'rb'))
