@@ -3,7 +3,7 @@
 
 These code are modified basd on [Sampling-based Planning for Robot Arm](https://github.com/aaronzguan/Sampling-based-Planning-for-Robot-Arm)
 
-Do not required ROS !!!
+Do not require ROS !!!
 
 
 2. `python main.py`
