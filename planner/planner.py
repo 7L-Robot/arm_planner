@@ -2,6 +2,17 @@ import numpy as np
 from planner.robot import Robot
 from planner import RRT, RRTConnect, PRM, OBPRM
 
+import time
+def timer(func):
+    def wrapper(*args, **kw):
+        st = time.time()        
+        ret = func(*args, **kw)
+        et = time.time()        
+        print('plan cost: ', et - st)
+        return ret
+    return wrapper
+
+
 
 # import types
 # def my_is_in_collision(self, joints):
@@ -17,7 +28,7 @@ from planner import RRT, RRTConnect, PRM, OBPRM
 
 
 class Planner():
-    def __init__(self, urdf_path, srdf_path, planner_name='rrtc') -> None:
+    def __init__(self, urdf_path, srdf_path, joint_groups=[], ee_joint=None, planner_name='rrtc') -> None:
         '''
         
         :param : 
@@ -28,7 +39,7 @@ class Planner():
         self.srdf_path = srdf_path
         self.planner_name = planner_name
 
-        self.robot = Robot()
+        self.robot = Robot(urdf_path, srdf_path, joint_groups, ee_joint)
 
         if planner_name == 'rrt':
             planner = RRT(self.robot, self.is_in_collision)
@@ -83,6 +94,7 @@ class Planner():
             dist += np.linalg.norm(np.array(plan[i+1]) - np.array(plan[i]))
         return dist
 
+    @timer
     def plan(self, joints_start, joints_target, constraint, args=None):
         planed_path = self.planner.plan(joints_start, joints_target, constraint, args)
 

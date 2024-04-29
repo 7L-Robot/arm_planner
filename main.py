@@ -45,7 +45,9 @@ if __name__ == '__main__':
     # 加机器人
     bot = RobotEnv(bid, cam, True, True)
 
-    planner = Planner(urdf_path, srdf_path, args.plan)
+    joint_groups = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7']
+
+    planner = Planner(urdf_path, srdf_path, joint_groups, 'panda_ee_joint', args.plan)
 
     '''
     TODO: Replace obstacle box w/ the box specs in your workspace:
@@ -127,13 +129,6 @@ if __name__ == '__main__':
         add_box( box[-3:]/2.0, box[:3], color=[1,1,0,0.5] )
         planner.add_obstacles(box)
 
-    # for bi, pose in enumerate(fr._collision_box_poses_raw):
-    #     pos = pose[:3]
-    #     w, x, y, z = pose[3:]
-    #     quat = [x,y,z,w]
-    #     size = fr.collision_box_shapes[bi]
-    #     add_box( size/2.0, pos, quat, color=[0,0,1,0.7] )
-
     bot.set_joints(joints_start)
 
     def ee_upright_constraint(q):
@@ -156,18 +151,20 @@ if __name__ == '__main__':
         grad = np.asarray([0, 0, 0, 2 * (ee[3] - desired_ee_rp[0]), 2 * (ee[4] - desired_ee_rp[1]), 0])
         return err, grad
 
-
     constraint = ee_upright_constraint
-    plan = planner.plan(joints_start, joints_target, constraint, args)
-    
-    
-    plan = np.array(plan)
-    plan = np.concatenate([plan, plan[:,:2]], axis=1)
+    # constraint = None
 
-    bot.show_path(plan)
-    input('go')
-    bot.follow_path(plan, 10)
-    bot.follow_path(plan[::-1], 10)
+    # add_box( [0.1, 0.01, 0.02], pos, quat, color=[0,1,0,1] )
+    
+    if True:
+        plan = planner.plan(joints_start, joints_target, constraint, args)
+        plan = np.array(plan)
+        plan = np.concatenate([plan, plan[:,:2]], axis=1)
+
+        bot.show_path(plan)
+        input('go')
+        bot.follow_path(plan, 10)
+        bot.follow_path(plan[::-1], 10)
 
     input('end')
     a = 1

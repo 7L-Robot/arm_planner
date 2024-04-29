@@ -3,15 +3,22 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from itertools import product
 
-# import rospy
-# from sensor_msgs.msg import JointState
-# from collision_boxes_publisher import CollisionBoxesPublisher
+from yourdfpy import urdf
+
+import time
+def timer(func):
+    def wrapper(*args, **kw):
+        st = time.time()        
+        ret = func(*args, **kw)
+        et = time.time()        
+        print('cost: ', et - st)
+        return ret
+    return wrapper
+
 
 
 class Robot:
 
-    joint_limits_low = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973])
-    joint_limits_high = np.array([2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973])
     home_joints = np.array([0, -np.pi / 4, 0, -3 * np.pi / 4, 0, np.pi / 2, np.pi / 4])
     dh_params = np.array([[0, 0.333, 0, 0],
                                 [0, 0, -np.pi/2, 0],
@@ -79,10 +86,32 @@ class Robot:
         [0.0136,  -0.0092,  0.1457, 0.92387953, 0, 0, -0.38268343]
     ])
 
-    def __init__(self):
-        # self._joint_state_pub = rospy.Publisher('joint_states', JointState, queue_size=10)
-        # self._collision_boxes_pub = CollisionBoxesPublisher('franka_collision_boxes')
+    def __init__(self, urdf_path, srdf_path=None, joint_groups=[], ee_joint=None ):
 
+        self.model = urdf.URDF.load(urdf_path)
+
+        self.urdf_path = urdf_path
+        self.srdf_path = srdf_path
+
+        if len(joint_groups) == 0:
+            self.joint_groups = self.model.actuated_joint_names
+        else:
+            self.joint_groups = joint_groups
+
+        self.num_dof = len(self.joint_groups)        
+
+        if ee_joint is None:
+            self.ee_joint = self.joint_groups[-1]
+        else:
+            self.ee_joint = ee_joint
+
+        self.find_ee_path(self.ee_joint)
+        # self.set_dh()
+        self.set_joint_limits()
+
+        # TODO SRDF
+
+        
         self._collision_boxes_data = np.zeros((len(self.collision_box_shapes), 10))
         self._collision_boxes_data[:, -3:] = self.collision_box_shapes
 
@@ -112,12 +141,131 @@ class Robot:
         self._box_vertices_offset = np.ones([8, 3])
         self._box_transform = np.eye(4)
 
+    def set_dh(self):
+        # TODO!!!!
+        all_dh = []
+        for j, joint_name in enumerate(self.joint_links):
+            
+            a, d, alpha, theta = 0, 0, 0, 0
+
+            joint = self.model.joint_map[joint_name]
+            
+            j_mat = joint.origin
+            j_rot = j_mat[:3,:3]
+            j_pos = j_mat[:3,3]
+            print(j_pos)
+            j_axs = joint.axis
+            
+            euler = Rotation.from_matrix(j_rot).as_euler('XYZ')
+
+            a = j_pos[0]
+            d = j_pos[1]
+
+            # if j_axs[2] != 0:
+            alpha = euler[ 0 ]
+            theta = euler[ 2 ]
+            
+            all_dh.append([a, d, alpha, theta])
+
+        self.all_dh = np.array(all_dh)
+
+
+    def set_joint_limits(self):
+        joint_limits_upper = []
+        joint_limits_lower = []
+        joint_velocities = []
+        for joint_name in self.joint_groups:
+            joint = self.model.joint_map[joint_name]
+
+            low = joint.limit.lower
+            up = joint.limit.upper
+            if low is None:
+                low = -np.pi
+            if up is None:
+                up = np.pi
+            v = joint.limit.velocity
+            if v is None:
+                v = 0.5
+            joint_limits_lower.append(low)
+            joint_limits_upper.append(up)
+            joint_velocities.append(v)
+
+        self.joint_limits_low = np.array(joint_limits_lower)
+        self.joint_limits_high = np.array(joint_limits_upper)
+        self.joint_velocities = np.array(joint_velocities)
+
+    def find_ee_path(self, ee_joint):
+        start = self.model.joint_names[0]
+        end = ee_joint
+        
+        parent = None
+        joint_links = []
+        
+        for joint_name in self.model.joint_names[::-1]:
+            if joint_name != end and parent is None: continue
+            
+            joint = self.model.joint_map[joint_name]
+            
+            if joint_name == end:
+                parent = joint.parent
+            elif joint_name != end:
+                if joint.child != parent: continue
+                parent = joint.parent
+
+            joint_links.append(joint_name)
+
+            if joint_name == start: break
+        
+        self.joint_links = joint_links[::-1]
+
+        # use for forward kinematics joint_value
+        self.joint_link_mask = []
+        for joint_name in self.joint_links:
+            joint = self.model.joint_map[joint_name]
+            if joint_name not in self.joint_groups:
+                self.joint_link_mask.append(False)
+            else:
+                self.joint_link_mask.append(True)
+
+    def get_ee(self, joint_values):
+        '''
+        Calculate the position of each joint using the matrix
+        Arguments: array of joint positions (rad)
+        Returns: A numpy array that contains the 4x4 transformation matrices from the base to the position of each joint.
+        '''
+        mat = np.eye(4)
+        forward_kinematics = np.zeros(( len(self.joint_links) , 4, 4))
+        
+        valid_j = 0
+        for j, joint_name in enumerate(self.joint_links):
+
+            joint = self.model.joint_map[joint_name]
+            
+            if self.joint_link_mask[j]:
+                joint_value = joint_values[valid_j]
+                valid_j += 1
+            else:
+                joint_value = 0
+
+            j_mat = joint.origin.copy()
+            j_axs = joint.axis
+            
+            j_mat[:3,:3] = np.matmul( j_mat[:3,:3], Rotation.from_rotvec(j_axs * joint_value).as_matrix())
+
+            mat = np.matmul(mat, j_mat)
+            
+            forward_kinematics[j] = mat + 0
+        
+        return forward_kinematics
+    
     def forward_kinematics(self, joints):
         '''
         Calculate the position of each joint using the dh_params
         Arguments: array of joint positions (rad)
         Returns: A numpy array that contains the 4x4 transformation matrices from the base to the position of each joint.
         '''
+        # return self.get_ee(joints)
+        
         forward_kinematics = np.zeros((len(self.dh_params), 4, 4))
         previous_transformation = np.eye(4)
 
@@ -293,17 +441,6 @@ class Robot:
         
         return False
 
-    # def publish_joints(self, joints):
-    #     joint_state = JointState()
-    #     joint_state.name = ['panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4', 'panda_joint5', 'panda_joint6', 'panda_joint7', 'panda_finger_joint1', 'panda_finger_joint2']
-    #     joint_state.header.stamp = rospy.Time.now()
-
-    #     if len(joints) == 7:
-    #         joints = np.concatenate([joints, [0, 0]])
-    #     joint_state.position = joints
-
-    #     self._joint_state_pub.publish(joint_state)
-
     def get_collision_boxes_poses(self, joints):
         fk = self.forward_kinematics(joints)
 
@@ -314,22 +451,3 @@ class Robot:
             box_poses_world.append(box_pose_world)
 
         return box_poses_world
-
-    # def publish_collision_boxes(self, joints):
-    #     box_poses_world = self.get_collision_boxes_poses(joints)
-
-    #     for i, pose in enumerate(box_poses_world):
-    #         self._collision_boxes_data[i, :3] = pose[:3, 3]
-    #         # q = quaternion.from_rotation_matrix(pose[:3, :3])
-    #         x,y,z,w = Rotation.from_matrix(pose[:3, :3]).as_quat()
-    #         q = {
-    #             'x': x,
-    #             'y': y,
-    #             'z': z,
-    #             'w': w
-    #         }
-
-    #         for j, k in enumerate('wxyz'):
-    #             self._collision_boxes_data[i, 3 + j] = getattr(q, k)
-
-    #     self._collision_boxes_pub.publish_boxes(self._collision_boxes_data)

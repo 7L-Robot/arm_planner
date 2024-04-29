@@ -28,8 +28,8 @@ class SimpleTree:
 
 class RRT:
 
-    def __init__(self, fr, is_in_collision):
-        self._fr = fr
+    def __init__(self, robot, is_in_collision):
+        self._robot = robot
         self._is_in_collision = is_in_collision
 
         '''
@@ -53,12 +53,12 @@ class RRT:
         The sampled configuration must be within the joint limits, but it does not check for collisions.
 
         Please use the following in your code:
-            self._fr.joint_limis_low - lower joint limits
-            self._fr.joint_limis_high - higher joint limits
-            self._fr.num_dof - the degree of freedom of franka
+            self._robot.joint_limis_low - lower joint limits
+            self._robot.joint_limis_high - higher joint limits
+            self._robot.num_dof - the degree of roboteedom of robotanka
         '''
         # Random Sample [1, num_dof] in the configuration space between lower joint limits and higher joint limits
-        q = (self._fr.joint_limits_high - self._fr.joint_limits_low) * np.random.random(self._fr.num_dof) + self._fr.joint_limits_low
+        q = (self._robot.joint_limits_high - self._robot.joint_limits_low) * np.random.random(self._robot.num_dof) + self._robot.joint_limits_low
         return q
 
     def project_to_constraint(self, q, constraint):
@@ -79,13 +79,13 @@ class RRT:
         Output:
             q_proj - the projected point
 
-        You can obtain the Jacobian by calling self._fr.jacobian(q)
+        You can obtain the Jacobian by calling self._robot.jacobian(q)
         '''
         q_proj = q.copy()
         err, grad = constraint(q)
         while err > self._constraint_th:
             # print('The error is: ', err)
-            J = self._fr.jacobian(q_proj)
+            J = self._robot.jacobian(q_proj)
             q_proj -= self._project_step_size * J.T.dot(grad)
             # q_proj -= self._project_step_size * J.T.dot(np.linalg.inv(J.dot(J.T))).dot(grad)
             err, grad = constraint(q_proj)
@@ -118,13 +118,14 @@ class RRT:
                 q_sample = self.sample_valid_joints()
 
             # Find the nearest node (q_near) of the sampling point in current nodes tree
-            # Make a step from the nearest node (q_near) to become a new node (q_new) and expand the nodes tree
+            # Make a step robotom the nearest node (q_near) to become a new node (q_new) and expand the nodes tree
             nearest_node_id = tree.get_nearest_node(q_sample)[0]
             q_near = tree.get_point(nearest_node_id)
             q_new = q_near + min(self._q_step_size, np.linalg.norm(q_sample - q_near)) * (q_sample - q_near) / np.linalg.norm(q_sample - q_near)
 
             # Check if the new node has collision with the constraint
-            q_new = self.project_to_constraint(q_new, constraint)
+            if constraint:
+                q_new = self.project_to_constraint(q_new, constraint)
 
             if self._is_in_collision(q_new):
                 is_collision = True

@@ -278,6 +278,12 @@
   </joint>
 
 
-      <!-- <origin rpy="0 0 3.14159265359" xyz="0 0 0"/> -->
-  
+  <link name="panda_link_ee"/>
+  <joint name="panda_ee_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.100"/>
+    <parent link="panda_hand"/>
+    <child link="panda_link_ee"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
 </robot>

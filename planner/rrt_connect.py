@@ -45,8 +45,8 @@ class SimpleTree:
 
 class RRTConnect:
 
-    def __init__(self, fr, is_in_collision):
-        self._fr = fr
+    def __init__(self, robot, is_in_collision):
+        self._robot = robot
         self._is_in_collision = is_in_collision
 
         self._q_step_size = 0.04   # Default：0.015
@@ -57,15 +57,15 @@ class RRTConnect:
         self._constraint_th = 1e-3
 
     def sample_valid_joints(self):
-        q = np.random.random(self._fr.num_dof) * (
-                    self._fr.joint_limits_high - self._fr.joint_limits_low) + self._fr.joint_limits_low
+        q = np.random.random(self._robot.num_dof) * (
+                    self._robot.joint_limits_high - self._robot.joint_limits_low) + self._robot.joint_limits_low
         return q
 
     def project_to_constraint(self, q0, constraint):
         q_proj = q0.copy()
         err, grad = constraint(q0)
         while err > self._constraint_th:
-            J = self._fr.jacobian(q_proj)
+            J = self._robot.jacobian(q_proj)
             q_proj -= self._project_step_size * J.T.dot(grad)
             err, grad = constraint(q_proj)
         return q_proj

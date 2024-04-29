@@ -111,7 +111,11 @@ class OBPRM:
             else:
                 q_sample = self.sample_valid_joints()
             # Project to constraint
-            q_new = self.project_to_constraint(q_sample, constraint)
+
+            if constraint:
+                q_new = self.project_to_constraint(q_sample, constraint)
+            else:
+                q_new = q_sample
 
             # Add the new node to the graph if it is collision free
             if not self._is_in_collision(q_new):
