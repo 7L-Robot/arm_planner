@@ -5,6 +5,8 @@ from itertools import product
 
 from yourdfpy import urdf
 
+import pybullet
+
 import time
 def timer(func):
     def wrapper(*args, **kw):
@@ -16,6 +18,14 @@ def timer(func):
     return wrapper
 
 
+
+import hppfcl
+
+def loadConvexMesh(file_name: str):
+    loader = hppfcl.MeshLoader()
+    bvh: hppfcl.BVHModelBase = loader.load(file_name)
+    bvh.buildConvexHull(True, "Qt")
+    return bvh.convex
 
 class Robot:
 
@@ -108,8 +118,32 @@ class Robot:
         self.find_ee_path(self.ee_joint)
         # self.set_dh()
         self.set_joint_limits()
-
+        self.load_meshes()
         # TODO SRDF
+        # self.bullet_robot = bullet_robot
+        
+        self.bullet_client = pybullet.connect(pybullet.DIRECT)
+        self.bullet_robot = pybullet.loadURDF(urdf_path, useFixedBase=True)
+        joint_num = pybullet.getNumJoints(self.bullet_robot)
+
+        joints = []
+        names = []
+
+        for j in range(joint_num):
+            info = pybullet.getJointInfo(self.bullet_robot, j)
+            joint_name = info[1]
+            joint_type = info[2]
+
+            if joint_type in [0, 1]:
+                joints.append(j)
+                names.append(joint_name)
+            
+            if joint_name == ee_joint.encode():
+                self.ee_joint_id = j
+
+        self.bullet_joints = joints
+        self.bullet_joint_names = names
+
 
         
         self._collision_boxes_data = np.zeros((len(self.collision_box_shapes), 10))
@@ -140,6 +174,94 @@ class Robot:
         self._collision_proj_axes = np.zeros((3, 15))
         self._box_vertices_offset = np.ones([8, 3])
         self._box_transform = np.eye(4)
+
+
+    def get_joints(self):
+        all_joints = pybullet.getJointStates(self.bullet_robot, self.bullet_joints)
+        joint_poses = []
+        for joint in all_joints:
+            joint_poses.append(joint[0])
+        return np.array(joint_poses)
+
+    def get_ee_pose(self, joints):
+        init_joints = self.get_joints()
+
+        self.set_joints(joints)
+        
+        link_state = pybullet.getLinkState(self.bullet_robot, self.ee_joint_id)
+        pos, quat = link_state[:2]
+        mat = np.eye(4)
+        mat[:3,:3] = Rotation.from_quat(quat).as_matrix()
+        mat[:3,3] = pos
+        
+        self.set_joints(init_joints)
+        return mat
+
+    def get_fk_pose(self, joints):
+
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING,0)
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_GUI,0)
+
+        init_joints = self.get_joints()
+
+        self.set_joints(joints)
+
+        all_joints = self.bullet_joints + [self.ee_joint_id]
+
+        fk_mat = np.zeros( (len(all_joints), 4, 4) )
+        
+        for j, joint_id in enumerate(all_joints):
+            
+            link_state = pybullet.getLinkState(self.bullet_robot, joint_id)
+            pos, quat = link_state[:2]
+            mat = np.eye(4)
+            mat[:3,:3] = Rotation.from_quat(quat).as_matrix()
+            mat[:3,3] = pos
+
+            fk_mat[j] = mat
+        
+        self.set_joints(init_joints)
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING,1)
+
+        return fk_mat
+
+
+    def check_collision(self, joints):
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING,0)
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_GUI,0)
+
+        init_joints = self.get_joints()
+
+        self.set_joints(joints)
+        for obstacle_id in self.obstacles:
+            closest_points = pybullet.getClosestPoints(
+                self.bullet_robot, obstacle_id, 0.18)
+            if closest_points is not None and len(closest_points) != 0:
+                return True
+                
+        self.set_joints(init_joints)
+        pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING,1)
+        return False
+
+
+    def set_joints(self, joints_values, joints_ids=None):
+        if joints_ids is None:
+            joints_ids = self.bullet_joints
+
+        for j in range( len(joints_values) ):
+            pybullet.resetJointState(
+                self.bullet_robot,
+                joints_ids[j],
+                joints_values[j] )
+
+
+    def load_meshes(self):
+        for joint_name in self.model.joint_map:
+            joint = self.model.joint_map[joint_name]
+            a = 1
+            # joint.
+            # loadConvexMesh()
+            
 
     def set_dh(self):
         # TODO!!!!
@@ -264,6 +386,7 @@ class Robot:
         Arguments: array of joint positions (rad)
         Returns: A numpy array that contains the 4x4 transformation matrices from the base to the position of each joint.
         '''
+        return self.get_fk_pose(joints)
         # return self.get_ee(joints)
         
         forward_kinematics = np.zeros((len(self.dh_params), 4, 4))
