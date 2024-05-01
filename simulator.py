@@ -35,7 +35,7 @@ class RobotEnv():
         self.robot_id = robot_id
         self.joint_num = len(joints)
 
-        self.init_joints = np.array([0, 0.2, 0.0, -2.62, 0.0, 2.94, 0.785, 0.04, 0.04])
+        self.init_joints = np.array([0, 0.2, 0.0, -2.62, 0.0, 2.94, 0.785, 0.04, 0.04])[:self.joint_num]
 
         self.use_force = use_force
 
@@ -68,7 +68,7 @@ class RobotEnv():
             joints_ids = self.joints
         
         if self.use_force:
-            for j in range( len(joints_ids) ):
+            for j in range( len(joints_values) ):
                 p.setJointMotorControl2(
                     self.robot_id,
                     joints_ids[j],
@@ -202,7 +202,6 @@ class RobotEnv():
 
     def show_path(self, plan, color=[0, 1, 0]):
         joints = self.get_joints()
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
         n = len(plan)
         for i in range(n-1):
             p1 = plan[i]
@@ -210,7 +209,6 @@ class RobotEnv():
             self.visualize_path(p1, p2, color)
         
         self.set_joints(joints)
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
 
 
 class Camera(object):

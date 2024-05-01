@@ -54,7 +54,9 @@ class RRTConnect:
         self._smoothed_nodes = 60
 
         self._project_step_size = 1e-1
-        self._constraint_th = 1e-3
+        self._project_step_size = 1
+        # TODO the step can be better
+        self._constraint_th = 1e-2
 
     def sample_valid_joints(self):
         q = np.random.random(self._robot.num_dof) * (
@@ -65,8 +67,14 @@ class RRTConnect:
         q_proj = q0.copy()
         err, grad = constraint(q0)
         while err > self._constraint_th:
+            scale = np.random.random() + 0.5
+            if err < 1:
+                scale *= 0.1
+            if err < 0.1:
+                scale *= 0.1
+                
             J = self._robot.jacobian(q_proj)
-            q_proj -= self._project_step_size * J.T.dot(grad)
+            q_proj -= scale * self._project_step_size * J.T.dot(grad)
             err, grad = constraint(q_proj)
         return q_proj
 

@@ -55,6 +55,7 @@ class Planner():
 
     def add_obstacles(self, shape):
         self.obstacles.append(shape)
+        self.robot.add_collision( f'box_{len(self.robot.bullet_obstacles)}' , shape[:3], [0,0,0,1], shape[-3:])
 
     def clear_obstacles(self):
         # TODO ompl-style??
@@ -63,30 +64,29 @@ class Planner():
     def is_in_collision(self, joints):
         if self.robot.check_self_collision(joints):
             return True
-        for box in self.obstacles:
-            if self.robot.check_box_collision(joints, box):
-                return True
-        return False
+        
+        return self.robot.check_collision(joints)
+    
 
-    def ee_upright_constraint(self, q):
-        '''
-        TODO: Implement constraint function and its gradient.
+    # def ee_upright_constraint(self, q):
+    #     '''
+    #     TODO: Implement constraint function and its gradient.
 
-        This constraint should enforce the end-effector stays upright.
-        Hint: Use the roll and pitch angle in desired_ee_rp. The end-effector is upright in its home state.
+    #     This constraint should enforce the end-effector stays upright.
+    #     Hint: Use the roll and pitch angle in desired_ee_rp. The end-effector is upright in its home state.
 
-        Input:
-            q - a joint configuration
+    #     Input:
+    #         q - a joint configuration
 
-        Output:
-            err - a non-negative scalar that is 0 when the constraint is satisfied
-            grad - a vector of length 6, where the ith element is the derivative of err w.r.t. the ith element of ee
-        '''
-        desired_ee_rp = self.desired_ee_rp
-        ee = self.robot.ee(q)
-        err = np.sum((np.asarray(desired_ee_rp) - np.asarray(ee[3:5])) ** 2)
-        grad = np.asarray([0, 0, 0, 2 * (ee[3] - desired_ee_rp[0]), 2 * (ee[4] - desired_ee_rp[1]), 0])
-        return err, grad
+    #     Output:
+    #         err - a non-negative scalar that is 0 when the constraint is satisfied
+    #         grad - a vector of length 6, where the ith element is the derivative of err w.r.t. the ith element of ee
+    #     '''
+    #     desired_ee_rp = self.desired_ee_rp
+    #     ee = self.robot.ee(q)
+    #     err = np.sum((np.asarray(desired_ee_rp) - np.asarray(ee[3:5])) ** 2)
+    #     grad = np.asarray([0, 0, 0, 2 * (ee[3] - desired_ee_rp[0]), 2 * (ee[4] - desired_ee_rp[1]), 0])
+    #     return err, grad
 
     def get_plan_quality(self, plan):
         dist = 0
@@ -96,9 +96,15 @@ class Planner():
 
     @timer
     def plan(self, joints_start, joints_target, constraint, args=None):
+        self.robot.stop_render()
+        self.robot.set_base([0,0,0])
+        
         planed_path = self.planner.plan(joints_start, joints_target, constraint, args)
 
         path_quality = self.get_plan_quality(planed_path)
         # print("Path quality: {}".format(path_quality))
+
+        self.robot.set_base([0,0,-200])
         
+        self.robot.start_render()
         return planed_path
